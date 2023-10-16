@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 4.0"
+      version = "~> 5.0"
     }
   }
 }
@@ -188,7 +188,7 @@ module "cloudfront_logs" {
 
   log_group_name  = "${var.prefix}-cloudfront-logs"
   log_bucket_name = "${var.prefix}-cloudfront-logs"
-  retention       = 365
+  retention       = local.cloudfront.logs_retention
 }
 
 /**
