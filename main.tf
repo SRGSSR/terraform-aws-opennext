@@ -143,6 +143,22 @@ module "revalidation_queue" {
 }
 
 /**
+ * Revalidation DynamoDB Table
+ **/
+module "revalidation_table" {
+  source       = "./modules/opennext-dynamodb"
+  prefix       = "${var.prefix}-revalidation-table"
+  default_tags = var.default_tags
+
+  name                   = local.revalidation_table_options.name
+  billing_mode           = local.revalidation_table_options.billing_mode
+  hash_key               = local.revalidation_table_options.hash_key
+  range_key              = local.revalidation_table_options.range_key
+  attribute              = local.revalidation_table_options.attribute
+  global_secondary_index = local.revalidation_table_options.global_secondary_index
+}
+
+/**
  * Warmer Function
  **/
 

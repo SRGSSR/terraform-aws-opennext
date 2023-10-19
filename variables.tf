@@ -240,6 +240,31 @@ variable "revalidation_options" {
   default = {}
 }
 
+variable "revalidation_table_options" {
+  description = "Variables passed to the opennext-dynamodb module for the Next.js ISR Revalidation table"
+  type = object({
+    name                   = optional(string)
+    billing_mode           = optional(string)
+    point_in_time_recovery = optional(bool)
+    hash_key               = optional(string)
+    range_key              = optional(string)
+    attribute = optional(list(object({
+      name = string
+      type = string
+    })))
+    global_secondary_index = optional(object({
+      name               = string
+      hash_key           = string
+      range_key          = string
+      write_capacity     = number
+      read_capacity      = number
+      projection_type    = string
+      non_key_attributes = list(string)
+    }))
+  })
+  default = {}
+}
+
 variable "warmer_options" {
   description = "Variables passed to the opennext-lambda module for the Next.js Warmer function"
   type = object({

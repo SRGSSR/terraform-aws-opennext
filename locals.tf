@@ -94,7 +94,8 @@ locals {
       CACHE_BUCKET_KEY_PREFIX   = "cache"
       CACHE_BUCKET_REGION       = data.aws_region.current.name
       REVALIDATION_QUEUE_URL    = module.revalidation_queue.queue.url
-      REVALIDATION_QUEUE_REGION = data.aws_region.current.name
+      REVALIDATION_QUEUE_REGION = data.aws_region.current.name,
+      CACHE_DYNAMO_TABLE        = module.revalidation_table.dynamodb_table.name
     }, coalesce(try(var.server_options.environment_variables, null), {}))
 
     iam_policy_statements = concat([
@@ -112,6 +113,11 @@ locals {
         effect    = "Allow"
         actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
         resources = [module.revalidation_queue.queue_kms_key.arn]
+      },
+      {
+        effect    = "Allow"
+        actions   = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query"]
+        resources = ["${module.revalidation_table.dynamodb_table.arn}", "${module.revalidation_table.dynamodb_table.arn}/*"]
       }
     ], coalesce(try(var.server_options.iam_policy, null), []))
   }
@@ -215,6 +221,38 @@ locals {
         resources = [module.revalidation_queue.queue_kms_key.arn]
       }
     ], coalesce(try(var.revalidation_options.iam_policy, null), []))
+  }
+
+  /**
+  * Revalidation Table Options
+  **/
+  revalidation_table_options = {
+    name         = try(var.revalidation_table_options.name, null)
+    billing_mode = coalesce(try(var.revalidation_table_options.billing_mode, null), "PAY_PER_REQUEST")
+    hash_key     = coalesce(try(var.revalidation_table_options.hash_key, null), "tag")
+    range_key    = coalesce(try(var.revalidation_table_options.range_key, null), "path")
+
+    attribute = concat([
+      {
+        name = "tag"
+        type = "S"
+      },
+      {
+        name = "path"
+        type = "S"
+      },
+      {
+        name = "revalidatedAt"
+        type = "N"
+      }
+    ], coalesce(try(var.revalidation_table_options.attribute, null), []))
+
+    global_secondary_index = merge({
+      name            = "revalidate",
+      hash_key        = "path",
+      range_key       = "revalidatedAt",
+      projection_type = "KEYS_ONLY"
+    }, try(var.revalidation_table_options.global_secondary_index, {}))
   }
 
   /**
