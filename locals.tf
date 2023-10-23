@@ -1,5 +1,8 @@
 locals {
   opennext_abs_path = "${abspath(path.root)}/${var.opennext_build_path}"
+
+  build_id                         = try(file("${local.opennext_abs_path}/assets/BUILD_ID"), null)
+  create_revalidation_insert_stack = fileexists("${local.revalidation_insert_options.package.source_dir}index.mjs")
 }
 
 locals {
@@ -97,7 +100,8 @@ locals {
       CACHE_BUCKET_KEY_PREFIX   = "cache"
       CACHE_BUCKET_REGION       = data.aws_region.current.name
       REVALIDATION_QUEUE_URL    = module.revalidation_queue.queue.url
-      REVALIDATION_QUEUE_REGION = data.aws_region.current.name
+      REVALIDATION_QUEUE_REGION = data.aws_region.current.name,
+      CACHE_DYNAMO_TABLE        = module.revalidation_table.dynamodb_table.name
     }, coalesce(try(var.server_options.environment_variables, null), {}))
 
     iam_policy_statements = concat([
@@ -115,6 +119,11 @@ locals {
         effect    = "Allow"
         actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
         resources = [module.revalidation_queue.queue_kms_key.arn]
+      },
+      {
+        effect    = "Allow"
+        actions   = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query"]
+        resources = ["${module.revalidation_table.dynamodb_table.arn}", "${module.revalidation_table.dynamodb_table.arn}/*"]
       }
     ], coalesce(try(var.server_options.iam_policy, null), []))
   }
@@ -218,6 +227,83 @@ locals {
         resources = [module.revalidation_queue.queue_kms_key.arn]
       }
     ], coalesce(try(var.revalidation_options.iam_policy, null), []))
+  }
+
+  /**
+  * Revalidation Table Options
+  **/
+  revalidation_table_options = {
+    name         = try(var.revalidation_table_options.name, null)
+    billing_mode = coalesce(try(var.revalidation_table_options.billing_mode, null), "PAY_PER_REQUEST")
+    hash_key     = coalesce(try(var.revalidation_table_options.hash_key, null), "tag")
+    range_key    = coalesce(try(var.revalidation_table_options.range_key, null), "path")
+
+    attribute = concat([
+      {
+        name = "tag"
+        type = "S"
+      },
+      {
+        name = "path"
+        type = "S"
+      },
+      {
+        name = "revalidatedAt"
+        type = "N"
+      }
+    ], coalesce(try(var.revalidation_table_options.attribute, null), []))
+
+    global_secondary_index = merge({
+      name            = "revalidate",
+      hash_key        = "path",
+      range_key       = "revalidatedAt",
+      projection_type = "KEYS_ONLY"
+    }, try(var.revalidation_table_options.global_secondary_index, {}))
+  }
+
+  revalidation_insert_options = {
+    package = {
+      source_dir = coalesce(try(var.revalidation_insert_options.package.source_dir, null), "${local.opennext_abs_path}/dynamodb-provider/")
+      output_dir = coalesce(try(var.revalidation_insert_options.package.output_dir, null), "${local.opennext_abs_path}/.build/")
+    }
+
+    function = {
+      function_name                  = try(var.revalidation_insert_options.function.function_name, null)
+      description                    = coalesce(try(var.revalidation_insert_options.function.description, null), "Next.js Revalidation Insert Function")
+      handler                        = coalesce(try(var.revalidation_insert_options.function.handler, null), "index.handler")
+      runtime                        = coalesce(try(var.revalidation_insert_options.function.runtime, null), "nodejs18.x")
+      architectures                  = coalesce(try(var.revalidation_insert_options.function.architectures, null), ["arm64"])
+      memory_size                    = coalesce(try(var.revalidation_insert_options.function.memory_size, null), 128)
+      timeout                        = coalesce(try(var.revalidation_insert_options.function.timeout, null), 30)
+      publish                        = coalesce(try(var.revalidation_insert_options.function.publish, null), false)
+      dead_letter_config             = try(var.revalidation_insert_options.function.dead_letter_config, null)
+      reserved_concurrent_executions = coalesce(try(var.revalidation_insert_options.function.reserved_concurrent_executions, null), 3)
+      code_signing_config            = try(var.revalidation_insert_options.function.code_signing_config, null)
+    }
+
+    log_group = {
+      retention_in_days = coalesce(try(var.revalidation_insert_options.log_group.retention_in_days, null), 365)
+      kms_key_id        = try(var.revalidation_insert_options.log_group.kms_key_id, null)
+    }
+
+    networking = {
+      vpc_id                       = try(var.revalidation_insert_options.networking.vpc_id, null)
+      subnet_ids                   = coalesce(try(var.revalidation_insert_options.networking.subnet_ids, null), [])
+      security_group_ingress_rules = coalesce(try(var.revalidation_insert_options.networking.sg_ingress_rules, null), [])
+      security_group_egress_rules  = coalesce(try(var.revalidation_insert_options.networking.sg_egress_rules, null), [])
+    }
+
+    environment_variables = merge({
+      CACHE_DYNAMO_TABLE        = module.revalidation_table.dynamodb_table.name
+    }, coalesce(try(var.server_options.environment_variables, null), {}))
+
+    iam_policy_statements = concat([
+      {
+        effect    = "Allow"
+        actions   = ["dynamodb:BatchWriteItem", "dynamodb:PutItem", "dynamodb:DescribeTable"]
+        resources = ["${module.revalidation_table.dynamodb_table.arn}", "${module.revalidation_table.dynamodb_table.arn}/*"]
+      }
+    ], coalesce(try(var.revalidation_insert_options.iam_policy, null), []))
   }
 
   /**

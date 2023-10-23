@@ -3,18 +3,14 @@ terraform {
 
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
-      version = "~> 4.0"
+      source                = "hashicorp/aws"
+      version               = ">= 4.0"
+      configuration_aliases = [aws.global]
     }
+
     archive = {
       source  = "hashicorp/archive"
       version = "~> 2.4.0"
     }
-  }
-}
-
-provider "aws" {
-  default_tags {
-    tags = var.default_tags
   }
 }

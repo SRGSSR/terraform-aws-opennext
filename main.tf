@@ -3,8 +3,9 @@ terraform {
 
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
-      version = "~> 4.0"
+      source                = "hashicorp/aws"
+      version               = ">= 4.0"
+      configuration_aliases = [aws.global]
     }
   }
 }
@@ -16,8 +17,7 @@ data "aws_region" "current" {}
  * Assets & Cache S3 Bucket
  **/
 module "assets" {
-  source       = "./modules/opennext-assets"
-  default_tags = var.default_tags
+  source = "./modules/opennext-assets"
 
   prefix                   = "${var.prefix}-assets"
   assets_path              = "${local.opennext_abs_path}/assets"
@@ -30,8 +30,7 @@ module "assets" {
  * Next.js Server Function
  **/
 module "server_function" {
-  source       = "./modules/opennext-lambda"
-  default_tags = var.default_tags
+  source = "./modules/opennext-lambda"
 
   prefix = "${var.prefix}-nextjs-server"
 
@@ -66,8 +65,7 @@ module "server_function" {
  * Image Optimization Function
  **/
 module "image_optimization_function" {
-  source       = "./modules/opennext-lambda"
-  default_tags = var.default_tags
+  source = "./modules/opennext-lambda"
 
   prefix = "${var.prefix}-nextjs-image-optimization"
 
@@ -100,8 +98,7 @@ module "image_optimization_function" {
  * ISR Revalidation Function
  **/
 module "revalidation_function" {
-  source       = "./modules/opennext-lambda"
-  default_tags = var.default_tags
+  source = "./modules/opennext-lambda"
 
   prefix = "${var.prefix}-nextjs-revalidation"
 
@@ -134,12 +131,80 @@ module "revalidation_function" {
  * ISR Revalidation Queue
  **/
 module "revalidation_queue" {
-  source       = "./modules/opennext-revalidation-queue"
-  prefix       = "${var.prefix}-revalidation-queue"
-  default_tags = var.default_tags
+  source = "./modules/opennext-revalidation-queue"
+  prefix = "${var.prefix}-revalidation-queue"
 
   aws_account_id            = data.aws_caller_identity.current.account_id
   revalidation_function_arn = module.revalidation_function.lambda_function.arn
+}
+
+/**
+ * Revalidation DynamoDB Table
+ **/
+module "revalidation_table" {
+  source = "./modules/opennext-dynamodb"
+  prefix = "${var.prefix}-revalidation-table"
+
+  name                   = local.revalidation_table_options.name
+  billing_mode           = local.revalidation_table_options.billing_mode
+  hash_key               = local.revalidation_table_options.hash_key
+  range_key              = local.revalidation_table_options.range_key
+  attribute              = local.revalidation_table_options.attribute
+  global_secondary_index = local.revalidation_table_options.global_secondary_index
+}
+
+/**
+ * Revalidation Insert Function
+ **/
+module "revalidation_insert_function" {
+  count = local.create_revalidation_insert_stack ? 1 : 0
+
+  source = "./modules/opennext-lambda"
+
+  prefix = "${var.prefix}-nextjs-revalidation-insert"
+
+  function_name                  = local.revalidation_insert_options.function.function_name
+  description                    = local.revalidation_insert_options.function.description
+  handler                        = local.revalidation_insert_options.function.handler
+  runtime                        = local.revalidation_insert_options.function.runtime
+  architectures                  = local.revalidation_insert_options.function.architectures
+  memory_size                    = local.revalidation_insert_options.function.memory_size
+  timeout                        = local.revalidation_insert_options.function.timeout
+  publish                        = local.revalidation_insert_options.function.publish
+  dead_letter_config             = local.revalidation_insert_options.function.dead_letter_config
+  reserved_concurrent_executions = local.revalidation_insert_options.function.reserved_concurrent_executions
+  code_signing_config            = local.revalidation_insert_options.function.code_signing_config
+  log_group                      = local.revalidation_insert_options.log_group
+
+  source_dir = local.revalidation_insert_options.package.source_dir
+  output_dir = local.revalidation_insert_options.package.output_dir
+
+  vpc_id                       = local.revalidation_insert_options.networking.vpc_id
+  subnet_ids                   = local.revalidation_insert_options.networking.subnet_ids
+  security_group_ingress_rules = local.revalidation_insert_options.networking.security_group_ingress_rules
+  security_group_egress_rules  = local.revalidation_insert_options.networking.security_group_egress_rules
+
+  environment_variables = local.revalidation_insert_options.environment_variables
+  iam_policy_statements = local.revalidation_insert_options.iam_policy_statements
+}
+
+/**
+ * Revalidation Insert Function rigger right after deployment
+ **/
+
+resource "aws_lambda_invocation" "revalidation_insert_trigger" {
+  count         = local.create_revalidation_insert_stack ? 1 : 0
+  function_name = module.revalidation_insert_function[0].lambda_function.function_name
+
+  triggers = {
+    deployed_at = timestamp()
+  }
+
+  input = jsonencode({
+    "RequestType" = "Create"
+  })
+
+  depends_on = [module.revalidation_table, module.revalidation_insert_function]
 }
 
 /**
@@ -147,8 +212,7 @@ module "revalidation_queue" {
  **/
 
 module "warmer_function" {
-  source       = "./modules/opennext-lambda"
-  default_tags = var.default_tags
+  source = "./modules/opennext-lambda"
 
   prefix                            = "${var.prefix}-nextjs-warmer"
   create_eventbridge_scheduled_rule = true
@@ -180,11 +244,30 @@ module "warmer_function" {
 }
 
 /**
+ * Warmer Function trigger right after deployment
+ **/
+
+resource "aws_lambda_invocation" "warmer_deployment_trigger" {
+  function_name = module.warmer_function.lambda_function.function_name
+
+  triggers = {
+    deployed_at = timestamp()
+  }
+
+  input = jsonencode({})
+
+  depends_on = [module.warmer_function]
+}
+
+/**
  * CloudFront -> CloudWatch Logs
  **/
 module "cloudfront_logs" {
-  source       = "./modules/cloudfront-logs"
-  default_tags = var.default_tags
+  source = "./modules/cloudfront-logs"
+
+  providers = {
+    aws.global = aws.global
+  }
 
   log_group_name  = "${var.prefix}-cloudfront-logs"
   log_bucket_name = "${var.prefix}-cloudfront-logs"
@@ -195,9 +278,12 @@ module "cloudfront_logs" {
  * Next.js CloudFront Distribution
  **/
 module "cloudfront" {
-  source       = "./modules/opennext-cloudfront"
-  prefix       = "${var.prefix}-cloudfront"
-  default_tags = var.default_tags
+  source = "./modules/opennext-cloudfront"
+  prefix = "${var.prefix}-cloudfront"
+
+  providers = {
+    aws.global = aws.global
+  }
 
   comment                       = local.cloudfront.comment
   logging_bucket_domain_name    = module.cloudfront_logs.logs_s3_bucket.bucket_regional_domain_name
