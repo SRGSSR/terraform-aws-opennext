@@ -240,6 +240,97 @@ variable "revalidation_options" {
   default = {}
 }
 
+variable "revalidation_table_options" {
+  description = "Variables passed to the opennext-dynamodb module for the Next.js ISR Revalidation table"
+  type = object({
+    name                   = optional(string)
+    billing_mode           = optional(string)
+    point_in_time_recovery = optional(bool)
+    hash_key               = optional(string)
+    range_key              = optional(string)
+    attribute = optional(list(object({
+      name = string
+      type = string
+    })))
+    global_secondary_index = optional(object({
+      name               = string
+      hash_key           = string
+      range_key          = string
+      write_capacity     = number
+      read_capacity      = number
+      projection_type    = string
+      non_key_attributes = list(string)
+    }))
+  })
+  default = {}
+}
+
+variable "revalidation_insert_options" {
+  description = "Variables passed to the opennext-lambda module for the Next.js Revalidation Insert function (used to insert revalidation records into the DynamoDB table)"
+  type = object({
+    package = optional(object({
+      source_dir = optional(string)
+      output_dir = optional(string)
+    }))
+    function = optional(object({
+      function_name                  = optional(string)
+      description                    = optional(string)
+      handler                        = optional(string)
+      runtime                        = optional(string)
+      architectures                  = optional(list(string))
+      memory_size                    = optional(number)
+      timeout                        = optional(number)
+      publish                        = optional(bool)
+      reserved_concurrent_executions = optional(number)
+      dead_letter_config = optional(object({
+        target_arn = string
+      }))
+      code_signing_config = optional(object({
+        description                     = optional(string)
+        signing_profile_version_arns    = list(string)
+        untrusted_artfact_on_deployment = optional(string)
+      }))
+    }))
+    environment_variables = optional(map(string))
+    iam_policy = optional(list(object({
+      effect    = string
+      actions   = list(string)
+      resources = list(string)
+    })))
+    networking = optional(object({
+      vpc_id     = optional(string)
+      subnet_ids = optional(list(string))
+      sg_ingress_rules = optional(list(object({
+        description      = string
+        from_port        = number
+        to_port          = number
+        cidr_blocks      = optional(list(string))
+        ipv6_cidr_blocks = optional(list(string))
+        prefix_list_ids  = optional(list(string))
+        protocol         = optional(string)
+        security_groups  = optional(list(string))
+        self             = optional(bool)
+      })))
+      sg_egress_rules = optional(list(object({
+        description      = string
+        from_port        = number
+        to_port          = number
+        cidr_blocks      = optional(list(string))
+        ipv6_cidr_blocks = optional(list(string))
+        prefix_list_ids  = optional(list(string))
+        protocol         = optional(string)
+        security_groups  = optional(list(string))
+        self             = optional(bool)
+      })))
+    }))
+    log_group = optional(object({
+      retention_in_days = optional(number)
+      kms_key_id        = optional(string)
+    }))
+  })
+  default = {}
+}
+
 variable "warmer_options" {
   description = "Variables passed to the opennext-lambda module for the Next.js Warmer function"
   type = object({
