@@ -487,5 +487,8 @@ variable "cloudfront" {
         uri_path = optional(bool)
       })))
     }))
+    custom_host_header_function = optional(object({
+      arn = string
+    }))
   })
 }

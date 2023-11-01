@@ -307,4 +307,6 @@ module "cloudfront" {
 
   custom_waf                = local.cloudfront.custom_waf
   waf_logging_configuration = local.cloudfront.waf_logging_configuration
+
+  custom_host_header_function = local.cloudfront.custom_host_header_function
 }

@@ -94,6 +94,7 @@ variable "custom_waf" {
   type = object({
     arn = string
   })
+  default = null
 }
 
 variable "waf_logging_configuration" {
@@ -181,3 +182,10 @@ variable "remove_headers_config" {
   })
 }
 
+variable "custom_host_header_function" {
+  description = "CloudFront function to process host header"
+  type = object({
+    arn = string
+  })
+  default = null
+}

@@ -58,6 +58,8 @@ locals {
 
     custom_waf                = var.cloudfront.custom_waf
     waf_logging_configuration = var.cloudfront.waf_logging_configuration
+
+    custom_host_header_function = var.cloudfront.custom_host_header_function
   }
 
   /**

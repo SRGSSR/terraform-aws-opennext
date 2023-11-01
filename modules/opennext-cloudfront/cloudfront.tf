@@ -2,9 +2,15 @@ locals {
   server_origin_id             = "${var.prefix}-server-origin"
   assets_origin_id             = "${var.prefix}-assets-origin"
   image_optimization_origin_id = "${var.prefix}-image-optimization-origin"
+  host_header_function_arn = try(
+    var.custom_host_header_function.arn,
+    aws_cloudfront_function.host_header_function[0].arn,
+    null
+  )
 }
 
 resource "aws_cloudfront_function" "host_header_function" {
+  count   = var.custom_host_header_function == null ? 1 : 0
   name    = "${var.prefix}-preserve-host"
   runtime = "cloudfront-js-1.0"
   comment = "Next.js Function for Preserving Original Host"
@@ -39,7 +45,7 @@ resource "aws_cloudfront_origin_request_policy" "origin_request_policy" {
 
     headers {
       items = concat(
-        ["accept", "rsc", "next-router-prefetch", "next-router-state-tree", "next-url"],
+        ["accept", "rsc", "next-router-prefetch", "next-router-state-tree", "x-prerender-revalidate", "next-url"],
         coalesce(var.origin_request_policy.headers_config.items, [])
       )
     }
@@ -81,7 +87,7 @@ resource "aws_cloudfront_cache_policy" "cache_policy" {
 
       headers {
         items = concat(
-          ["accept", "rsc", "next-router-prefetch", "next-router-state-tree", "next-url"],
+          ["accept", "rsc", "next-router-prefetch", "next-router-state-tree", "x-prerender-revalidate", "next-url"],
           coalesce(var.cache_policy.headers_config.items, [])
         )
       }
@@ -282,7 +288,7 @@ resource "aws_cloudfront_distribution" "distribution" {
 
     function_association {
       event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.host_header_function.arn
+      function_arn = local.host_header_function_arn
     }
   }
 
@@ -304,7 +310,7 @@ resource "aws_cloudfront_distribution" "distribution" {
 
     function_association {
       event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.host_header_function.arn
+      function_arn = local.host_header_function_arn
     }
   }
 
@@ -363,7 +369,7 @@ resource "aws_cloudfront_distribution" "distribution" {
 
     function_association {
       event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.host_header_function.arn
+      function_arn = local.host_header_function_arn
     }
   }
 }
