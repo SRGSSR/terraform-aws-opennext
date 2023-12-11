@@ -196,12 +196,12 @@ resource "aws_s3_object" "assets" {
 }
 
 # Cached Files
-resource "aws_s3_object" "cache" {
-  for_each = fileset(var.cache_path, "**")
+resource "null_resource" "cache" {
+  triggers = {
+    always_run = timestamp()
+  }
 
-  bucket       = aws_s3_bucket.assets.bucket
-  key          = "cache/${each.value}"
-  source       = "${var.cache_path}/${each.value}"
-  source_hash  = filemd5("${var.cache_path}/${each.value}")
-  content_type = lookup(local.content_type_lookup, split(".", each.value)[length(split(".", each.value)) - 1], "text/plain")
+  provisioner "local-exec" {
+    command = "aws s3 cp --recursive ${var.cache_path} s3://${aws_s3_bucket.assets.bucket}/cache/"
+  }
 }
